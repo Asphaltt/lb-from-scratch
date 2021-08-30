@@ -1,4 +1,4 @@
-#include "xdp_lb_kern.h"
+#include "xdp_lb.h"
 
 #define IP_ADDRESS(x) (unsigned int)(172 + (17 << 8) + (0 << 16) + (x << 24))
 
@@ -7,13 +7,13 @@
 #define CLIENT 4
 #define LB 5
 
-SEC("xdp_lb")
+#define ETH_P_IP    0x0800      /* Internet Protocol packet */
+
+SEC("xdp")
 int xdp_load_balancer(struct xdp_md *ctx)
 {
     void *data = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
-
-    bpf_printk("got something");
 
     struct ethhdr *eth = data;
     if (data + sizeof(struct ethhdr) > data_end)
@@ -28,8 +28,6 @@ int xdp_load_balancer(struct xdp_md *ctx)
 
     if (iph->protocol != IPPROTO_TCP)
         return XDP_PASS;
-
-    bpf_printk("Got TCP packet from %x", iph->saddr);
 
     if (iph->saddr == IP_ADDRESS(CLIENT))
     {
@@ -51,6 +49,13 @@ int xdp_load_balancer(struct xdp_md *ctx)
     iph->check = iph_csum(iph);
 
     return XDP_TX;
+}
+
+
+SEC("xdp")
+int xdp_pass(struct xdp_md *ctx)
+{
+    return XDP_PASS;
 }
 
 char _license[] SEC("license") = "GPL";

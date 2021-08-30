@@ -1,28 +1,33 @@
-xdp: xdp_lb_kern.o
-	bpftool net detach xdpgeneric dev eth0
-	rm -f /sys/fs/bpf/xdp_lb
-	bpftool prog load xdp_lb_kern.o /sys/fs/bpf/xdp_lb
-	bpftool net attach xdpgeneric pinned /sys/fs/bpf/xdp_lb dev eth0 
+GOCMD := go
+GOBUILD := $(GOCMD) build
+GOCLEAN := $(GOCMD) clean
+CLANG := clang
+CLANG_INCLUDE := -I./ebpf_prog
 
-xdp_lb_kern.o: xdp_lb_kern.c 
-	clang -S \
-	    -target bpf \
-	    -D __BPF_TRACING__ \
-	    -Ilibbpf/src\
-	    -Wall \
-	    -Wno-unused-value \
-	    -Wno-pointer-sign \
-	    -Wno-compare-distinct-pointer-types \
-	    -Werror \
-	    -O2 -emit-llvm -c -o ${@:.o=.ll} $<
-	llc -march=bpf -filetype=obj -o $@ ${@:.o=.ll}
+GO_SOURCE := ${PWD}/*.go
+GO_BINARY := xdp-lb
+
+EBPF_SOURCE := ebpf_prog/xdp_lb.c
+EBPF_BINARY := ebpf_prog/xdp_lb.elf
+
+.PHONY: all rebuild build_ebpf build_go clean
+
+all: build_ebpf build_go
+
+rebuild: clean all
+
+build_ebpf: $(EBPF_BINARY)
+
+build_go: $(GO_BINARY)
 
 clean:
-	bpftool net detach xdpgeneric dev eth0
-	rm -f /sys/fs/bpf/xdp_lb
-	rm xdp_lb_kern.o
-	rm xdp_lb_kern.ll
+	$(GOCLEAN)
+	rm -f $(GO_BINARY)
+	rm -f $(EBPF_BINARY)
 
+$(EBPF_BINARY): $(EBPF_SOURCE)
+	$(CLANG) $(CLANG_INCLUDE) -O2 -target bpf -c $^  -o $@
+	rm -f $(GO_BINARY)
 
-
-
+$(GO_BINARY): $(GO_SOURCE)
+	$(GOBUILD) -v -o $@ $^
